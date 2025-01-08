@@ -5,7 +5,6 @@ import numpy as np
 # uses subclipped to select seconds within the video.
 clip = (
     VideoFileClip("liverpool-vs-united.mp4")
-    .subclipped(5, 120)
     )
 
 
@@ -25,7 +24,6 @@ final_video = CompositeVideoClip([clip])
 
 # converts to audio
 final_audio = final_video.audio
-
 
 # Peak detection
 
@@ -50,7 +48,7 @@ for start in range(0, len(audio_array), chunk_size):
     rms = np.sqrt(np.mean(chunk_mono**2))
     rms_values.append(rms)
 
-# Then do your threshold
+# threshold
 threshold = np.percentile(rms_values, 95) 
 spikes = [i for i, val in enumerate(rms_values) if val > threshold]
 
@@ -61,3 +59,23 @@ rounded_times = np.round(spike_times)
 print("Spikes detected at (seconds):")
 print(*list(dict.fromkeys(rounded_times)), sep="\n")
 
+
+buffer = 2  # how many seconds before & after the spike
+count = 0
+
+
+# FIXME: still new work
+# Remove duplicates
+unique_spike_times = list(dict.fromkeys(rounded_times))
+
+for spike_time in unique_spike_times:
+    start = max(0, spike_time - buffer)
+    end = spike_time + buffer
+    
+    highlight = final_video.subclipped(start, end)
+    
+    # name the file something like highlight-1.mp4
+    filename = f"highlight-{count}.mp4"
+    highlight.write_videofile(filename)
+    
+    count += 1
