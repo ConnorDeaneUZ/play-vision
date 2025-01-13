@@ -6,15 +6,6 @@ import os
 import numpy as np
 
 
-## import detection model
-from detection import CNN_LSTM
-
-## load trained model
-model = CNN_LSTM(feature_dim=522, hidden_dim=128, num_classes=2)
-model.load_state_dict(torch.load("goal_detection_model.pth"))
-model.eval()
-
-
 # Pre-trained ResNet model
 resnet = models.resnet18(weights='IMAGENET1K_V1')
 resnet.fc = torch.nn.Identity()  # Remove the classification layer
@@ -46,21 +37,3 @@ frame_features = extract_frame_features("frames/")
 print(frame_features.shape)  # Output the shape of the tensor
 
 
-
-# Function to predict if the video contains a goal
-def predict_goal(frame_features):
-    frame_features = frame_features.unsqueeze(0)  # Add batch dimension
-    with torch.no_grad():
-        output = model(frame_features)
-        _, predicted = torch.max(output, 1)
-    return "Goal" if predicted.item() == 1 else "No Goal"
-
-
-
-# Step 2: Extract frame features
-features = extract_frame_features("frames/")
-print(f"Extracted features shape: {features.shape}")
-
-# Step 3: Predict if a goal occurred
-prediction = predict_goal(features)
-print(f"Prediction: {prediction}")
