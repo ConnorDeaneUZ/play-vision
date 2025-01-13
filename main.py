@@ -2,7 +2,7 @@ from moviepy import VideoFileClip, CompositeVideoClip
 import numpy as np
 
 # load video
-clip = VideoFileClip("full-match.mp4")
+clip = VideoFileClip("liverpool-vs-united.mp4")
 final_video = CompositeVideoClip([clip])
 
 # extract audio
