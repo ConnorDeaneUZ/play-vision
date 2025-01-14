@@ -1,5 +1,6 @@
 from moviepy import VideoFileClip, CompositeVideoClip
 import numpy as np
+import os
 
 # load video
 clip = VideoFileClip("liverpool-vs-united.mp4")
@@ -73,13 +74,18 @@ if intervals:
     # Add the last interval
     merged_intervals.append((current_start, current_end))
 
-# create subclips for each merged interval
-count = 0
-for (start, end) in merged_intervals:
-    count += 1
-    
-    highlight = final_video.subclipped(start, end)
-    
-    filename = f"highlight-{count}.mp4"
-    print(f"Writing: {filename} (start={start}, end={end})")
-    highlight.write_videofile(filename)
+def splice_clips(output_dir):
+    os.makedirs(output_dir, exist_ok=True)
+    count = 0
+    for (start, end) in merged_intervals:
+        count += 1
+        
+        highlight = final_video.subclipped(start, end)
+        
+        clip_path = os.path.join(output_dir, f"highlight-{count}.mp4")
+        highlight.write_videofile(clip_path)
+
+        # print(f"Writing: {filename} (start={start}, end={end})")
+
+
+splice_clips("clips")
