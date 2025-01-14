@@ -4,7 +4,7 @@ import torch.optim as optim
 from detection import CNN_LSTM
 from torch.utils.data import DataLoader, Dataset
 
-# Sample Dataset class (replace this with your actual dataset)
+# sample Dataset class (replace this with your actual dataset)
 class VideoDataset(Dataset):
     def __init__(self, feature_files, labels):
         self.feature_files = feature_files
@@ -18,20 +18,20 @@ class VideoDataset(Dataset):
         label = self.labels[idx]
         return features, label
 
-# Load your dataset
+# load your dataset
 feature_files = ["features/goal_1.pt", "features/no_goal_1.pt"]  # Example files
 labels = [1, 0]  # 1 = Goal, 0 = No Goal
 dataset = VideoDataset(feature_files, labels)
 dataloader = DataLoader(dataset, batch_size=2, shuffle=True)
 
-# Create the model
+# create the model
 model = CNN_LSTM(feature_dim=512, hidden_dim=128, num_classes=2)
 
-# Loss and optimizer
+# loss and optimizer
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-# Training loop
+# training loop
 for epoch in range(10):  # Train for 10 epochs
     total_loss = 0
     for features, label in dataloader:
@@ -44,6 +44,6 @@ for epoch in range(10):  # Train for 10 epochs
 
     print(f"Epoch {epoch + 1}, Loss: {total_loss:.4f}")
 
-# ✅ Save the trained model
+# save trained model
 torch.save(model.state_dict(), "goal_detection_model.pth")
 print("Model saved as goal_detection_model.pth")
