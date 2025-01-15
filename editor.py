@@ -1,91 +1,112 @@
-from moviepy import VideoFileClip, CompositeVideoClip
 import numpy as np
 import os
+from dataclasses import dataclass
+from typing import List, Tuple
+from moviepy import VideoFileClip, CompositeVideoClip
 
-# load video
-clip = VideoFileClip("liverpool-vs-united.mp4")
-final_video = CompositeVideoClip([clip])
+@dataclass
+class AudioAnalysisConfig:
+    sample_rate: int = 44100
+    chunk_duration: float = 0.1  # seconds
+    spike_threshold_percentile: float = 95
+    highlight_buffer: int = 5  # seconds
 
-# extract audio
-final_audio = final_video.audio
+class HighlightDetector:
+    def __init__(self, video_path: str, config: AudioAnalysisConfig = None):
+        self.video_path = video_path
+        self.config = config or AudioAnalysisConfig()
+        self.clip = None
+        self.final_video = None
+        self.rms_values = []
+        self.merged_intervals = []
 
-# convert audio to numpy array
-sample_rate = 44100
-audio_array = final_audio.to_soundarray(fps=sample_rate)
+    def load_video(self):
+        try:
+            self.clip = VideoFileClip(self.video_path)
+            self.final_video = CompositeVideoClip([self.clip])
+        except Exception as e:
+            raise RuntimeError(f"Failed to load video: {e}")
 
-chunk_size = int(sample_rate * 0.1)
-rms_values = []
-
-for start_idx in range(0, len(audio_array), chunk_size):
-    end_idx = start_idx + chunk_size
-    chunk = audio_array[start_idx:end_idx]
-    
-    if len(chunk) == 0:
-        continue
-    
-    # convert stereo to mono
-    chunk_mono = np.mean(chunk, axis=1)
-
-    # RMS = sqrt(mean of squares)
-    rms = np.sqrt(np.mean(chunk_mono**2))
-    rms_values.append(rms)
-
-# audio spike detection
-threshold = np.percentile(rms_values, 95)  # top 5 %
-spikes = [i for i, val in enumerate(rms_values) if val > threshold]
-
-spike_times = [i * 0.1 for i in spikes]  # each chunk ~0.1s
-rounded_times = np.round(spike_times)
-
-print("Spikes detected at (seconds):")
-print(*list(dict.fromkeys(rounded_times)), sep="\n")
-
-# build intervals from spike times
-# 5 secs buffer start and end
-buffer = 5  
-intervals = []
-
-unique_spike_times = list(dict.fromkeys(rounded_times))  # remove duplicates
-unique_spike_times.sort()  # sort them in ascending order
-
-for spike_time in unique_spike_times:
-    start = max(0, spike_time - buffer)
-    end = spike_time + buffer
-    intervals.append((start, end))
-
-# merge overlapping intervals
-intervals.sort(key=lambda x: x[0])  # sort by start time
-merged_intervals = []
-
-if intervals:
-    current_start, current_end = intervals[0]
-    
-    for i in range(1, len(intervals)):
-        next_start, next_end = intervals[i]
+    def analyze_audio(self):
+        audio = self.final_video.audio
+        audio_array = audio.to_soundarray(fps=self.config.sample_rate)
+        chunk_size = int(self.config.sample_rate * self.config.chunk_duration)
         
-        if next_start <= current_end:
-            # Overlaps or touches the current interval
-            current_end = max(current_end, next_end)
-        else:
-            # No overlap: push old interval to the list, start a new one
-            merged_intervals.append((current_start, current_end))
-            current_start, current_end = next_start, next_end
-    
-    # Add the last interval
-    merged_intervals.append((current_start, current_end))
+        for start_idx in range(0, len(audio_array), chunk_size):
+            chunk = audio_array[start_idx:min(start_idx + chunk_size, len(audio_array))]
+            if len(chunk) == 0:
+                continue
+            
+            chunk_mono = np.mean(chunk, axis=1)
+            rms = np.sqrt(np.mean(chunk_mono**2))
+            self.rms_values.append(rms)
 
-def splice_clips(output_dir):
-    os.makedirs(output_dir, exist_ok=True)
-    count = 0
-    for (start, end) in merged_intervals:
-        count += 1
+    def detect_spikes(self) -> List[float]:
+        threshold = np.percentile(self.rms_values, self.config.spike_threshold_percentile)
+        spikes = [i for i, val in enumerate(self.rms_values) if val > threshold]
+        spike_times = [i * self.config.chunk_duration for i in spikes]
+        return list(dict.fromkeys(np.round(spike_times)))
+
+    def create_intervals(self, spike_times: List[float]) -> List[Tuple[float, float]]:
+        intervals = []
+        for spike_time in sorted(spike_times):
+            start = max(0, spike_time - self.config.highlight_buffer)
+            end = min(spike_time + self.config.highlight_buffer, self.clip.duration)
+            intervals.append((start, end))
+        return intervals
+
+    def merge_intervals(self, intervals: List[Tuple[float, float]]):
+        if not intervals:
+            return
+            
+        intervals.sort(key=lambda x: x[0])
+        current_start, current_end = intervals[0]
         
-        highlight = final_video.subclipped(start, end)
+        for next_start, next_end in intervals[1:]:
+            if next_start <= current_end:
+                current_end = max(current_end, next_end)
+            else:
+                self.merged_intervals.append((current_start, current_end))
+                current_start, current_end = next_start, next_end
         
-        clip_path = os.path.join(output_dir, f"highlight-{count}.mp4")
-        highlight.write_videofile(clip_path)
+        self.merged_intervals.append((current_start, current_end))
 
-        # print(f"Writing: {filename} (start={start}, end={end})")
+    def export_highlights(self, output_dir: str, verbose: bool = False):
+        os.makedirs(output_dir, exist_ok=True)
+        try:
+            for idx, (start, end) in enumerate(self.merged_intervals, 1):
+                if verbose:
+                    print(f"Processing highlight {idx}/{len(self.merged_intervals)}")
+                
+                highlight = self.final_video.subclipped(start, end)
+                clip_path = os.path.join(output_dir, f"highlight-{idx}.mp4")
+                highlight.write_videofile(clip_path)
+                highlight.close()
+        finally:
+            self.cleanup()
 
+    def cleanup(self):
+        if self.final_video:
+            self.final_video.close()
+        if self.clip:
+            self.clip.close()
 
-splice_clips("clips")
+    def process(self, output_dir: str, verbose: bool = False):
+        """Main processing pipeline"""
+        self.load_video()
+        self.analyze_audio()
+        spike_times = self.detect_spikes()
+        intervals = self.create_intervals(spike_times)
+        self.merge_intervals(intervals)
+        self.export_highlights(output_dir, verbose)
+
+def main():
+    detector = HighlightDetector("liverpool-vs-united.mp4")
+    try:
+        detector.process("clips", verbose=False)
+    except Exception as e:
+        print(f"Error processing video: {e}")
+        detector.cleanup()
+
+if __name__ == "__main__":
+    main()
