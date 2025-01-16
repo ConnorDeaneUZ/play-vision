@@ -99,14 +99,3 @@ class HighlightDetector:
         intervals = self.create_intervals(spike_times)
         self.merge_intervals(intervals)
         self.export_highlights(output_dir, verbose)
-
-def main():
-    detector = HighlightDetector("liverpool-vs-united.mp4")
-    try:
-        detector.process("clips", verbose=False)
-    except Exception as e:
-        print(f"Error processing video: {e}")
-        detector.cleanup()
-
-if __name__ == "__main__":
-    main()

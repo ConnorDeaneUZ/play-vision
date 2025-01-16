@@ -61,8 +61,4 @@ class VideoFrameExtractor:
         return 0
 
 
-# Example usage
-if __name__ == "__main__":
-    extractor = VideoFrameExtractor("highlight-1.mp4", "frames/")
-    extractor.extract()
 

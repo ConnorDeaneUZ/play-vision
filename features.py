@@ -3,6 +3,7 @@ import torchvision.models as models
 import torchvision.transforms as transforms
 from PIL import Image
 import os
+import cv2
 import numpy as np
 
 
@@ -43,8 +44,14 @@ class FeatureExtractor:
         
         return features.cpu()
     
-    def extract_from_directory(self, frame_dir, file_extension=".jpg"):
-        """Extract features from all images in a directory."""
+    def extract_from_directory(self, frame_dir, file_extension=".jpg", save_path=None, save_dir=None):
+        """Extract features from all images in a directory.
+        
+        Args:
+            frame_dir (str): Directory containing the frames
+            file_extension (str): File extension to filter images
+            save_path (str, optional): Path to save the features. If None, features are only returned
+        """
         frame_paths = sorted([
             os.path.join(frame_dir, f) 
             for f in os.listdir(frame_dir) 
@@ -56,13 +63,17 @@ class FeatureExtractor:
             feature = self.extract_single_image(frame_path)
             features.append(feature.numpy())
         
-        return torch.from_numpy(np.array(features))
+        features_tensor = torch.from_numpy(np.array(features))
+        
+        if save_path:
+            # Create directory first
+            dir_name = os.path.dirname(save_path)
+            os.makedirs(dir_name, exist_ok=True)
+            # Then save the features
+            torch.save(features_tensor, save_path)
+            print(f"Features saved to {save_path}")
+        
+        return features_tensor
 
-
-# Example usage
-if __name__ == "__main__":
-    extractor = FeatureExtractor()
-    frame_features = extractor.extract_from_directory("frames/")
-    print(frame_features.shape)
 
 
