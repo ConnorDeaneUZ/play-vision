@@ -1,21 +1,71 @@
-Play Vision POC - Football Goal Detection Project
+# Play Vision - Football Goal Detection Project
 
-Welcome to the Play Vision project! This repository is an end-to-end solution for detecting football goals in match footage using Computer Vision (CV) and Deep Learning (DL) techniques. The project combines audio spike detection, frame extraction, feature extraction using ResNet, and goal prediction using a CNN + LSTM model.
+Welcome to the **Play Vision** project. This repository provides an innovative, end-to-end solution for detecting football goals in match footage using advanced Computer Vision (CV) and Deep Learning (DL) techniques. The project is designed to streamline the process of identifying goals in large volumes of video data by combining cutting-edge AI methods with efficient video processing.
 
-📂 Project Structure
+---
 
-play-vision/
+## 🌟 Project Highlights
 
-├── main.py         # Main entry point for running the entire project
+### Key Features:
+1. **Audio Spike Detection**:
+   - Analyses audio streams to identify moments of high crowd activity or commentary intensity, narrowing down key moments in the footage.
+   
+2. **Frame Extraction**:
+   - Extracts relevant video frames from clips, focusing on moments of interest identified during audio analysis.
 
-├── detection.py    # Contains the CNN_LSTM model architecture
+3. **Feature Extraction with ResNet**:
+   - Leverages a pretrained ResNet model to extract spatial features from video frames, reducing the complexity of training from scratch.
 
-├── editor.py       # Handles video editing and audio spike detection
+4. **Goal Prediction with CNN + LSTM**:
+   - Uses a hybrid deep learning model:
+     - **CNN** for analyzing spatial data (video frames).
+     - **LSTM** for capturing temporal sequences (patterns across multiple frames).
 
-├── extract.py      # Extracts frames from video clips
+5. **End-to-End Automation**:
+   - Seamlessly integrates the entire pipeline from raw video input to final goal predictions, making it scalable for large datasets.
 
-├── features.py     # Extracts ResNet features from frames
+---
 
-├── predict.py      # Uses the trained model to predict goals in new clips
+## 📊 Goals of the Project:
+- **Automation**: Replace manual video review with a fully automated pipeline.
+- **Scalability**: Process thousands of hours of match footage efficiently.
+- **Accuracy**: Achieve high precision in goal detection using robust feature extraction and sequence modeling techniques.
+- **Real-World Applicability**: Adaptable for broadcasters, analysts, or sports organizations to streamline game analysis.
 
-├── train.py        # Handles the training process for the CNN_LSTM model
+---
+
+## 🚀 Workflow Overview:
+1. **Input**:
+   - Match footage in standard video formats.
+   
+2. **Audio Analysis**:
+   - Detect key audio spikes (e.g., cheers, commentary) to identify potentially significant moments.
+   
+3. **Frame Processing**:
+   - Extract frames around identified moments for further analysis.
+   
+4. **Feature Extraction**:
+   - Use ResNet to identify visual features of the extracted frames.
+   
+5. **Goal Prediction**:
+   - Process the extracted features through a CNN + LSTM model to predict whether a goal occurred.
+
+6. **Output**:
+   - Generate a report with timestamps or video segments for detected goals.
+
+---
+
+## 🛠️ Technologies Used:
+- **Python**: For implementing the pipeline and models.
+- **Deep Learning Frameworks**: PyTorch for building and training the CNN + LSTM model.
+- **Computer Vision**: OpenCV for video and frame processing.
+- **Pretrained Models**: ResNet for feature extraction to save on computational cost and improve accuracy.
+- **Audio Processing**: MoviePy and Numpy for detecting audio spikes and analysing sound intensity.
+
+---
+
+## 📋 How to Use:
+1. Clone the repository:  
+   ```bash
+   git clone https://github.com/your-username/play-vision.git
+   cd play-vision
