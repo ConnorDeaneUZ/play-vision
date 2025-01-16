@@ -1,10 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from detection import CNN_LSTM
 from torch.utils.data import DataLoader, Dataset
+from detection import CNN_LSTM
 
-# sample Dataset class (replace this with your actual dataset)
 class VideoDataset(Dataset):
     def __init__(self, feature_files, labels):
         self.feature_files = feature_files
@@ -18,32 +17,76 @@ class VideoDataset(Dataset):
         label = self.labels[idx]
         return features, label
 
-# load your dataset
-feature_files = ["features/goal_1.pt", "features/no_goal_1.pt"]  # Example files
-labels = [1, 0]  # 1 = Goal, 0 = No Goal
-dataset = VideoDataset(feature_files, labels)
-dataloader = DataLoader(dataset, batch_size=2, shuffle=True)
+class ModelTrainer:
+    def __init__(
+        self,
+        model,
+        criterion,
+        optimizer_class=optim.Adam,
+        learning_rate=0.001,
+        batch_size=2,
+        num_epochs=10,
+        device='cuda' if torch.cuda.is_available() else 'cpu'
+    ):
+        self.device = device
+        self.model = model.to(device)
+        self.criterion = criterion
+        self.optimizer = optimizer_class(model.parameters(), lr=learning_rate)
+        self.batch_size = batch_size
+        self.num_epochs = num_epochs
 
-# create the model
-model = CNN_LSTM(feature_dim=512, hidden_dim=128, num_classes=2)
+    def prepare_data(self, feature_files, labels):
+        dataset = VideoDataset(feature_files, labels)
+        return DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
 
-# loss and optimizer
-criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters(), lr=0.001)
-
-# training loop
-for epoch in range(10):  # Train for 10 epochs
-    total_loss = 0
-    for features, label in dataloader:
-        optimizer.zero_grad()
-        output = model(features)
-        loss = criterion(output, label)
+    def train_step(self, features, labels):
+        features = features.to(self.device)
+        labels = labels.to(self.device)
+        
+        self.optimizer.zero_grad()
+        outputs = self.model(features)
+        loss = self.criterion(outputs, labels)
         loss.backward()
-        optimizer.step()
-        total_loss += loss.item()
+        self.optimizer.step()
+        
+        return loss.item()
 
-    print(f"Epoch {epoch + 1}, Loss: {total_loss:.4f}")
+    def train(self, dataloader):
+        self.model.train()
+        for epoch in range(self.num_epochs):
+            total_loss = 0
+            for features, labels in dataloader:
+                loss = self.train_step(features, labels)
+                total_loss += loss
 
-# save trained model
-torch.save(model.state_dict(), "goal_detection_model.pth")
-print("Model saved as goal_detection_model.pth")
+            print(f"Epoch {epoch + 1}, Loss: {total_loss:.4f}")
+
+    def save_model(self, path):
+        torch.save(self.model.state_dict(), path)
+        print(f"Model saved as {path}")
+
+def main():
+    # Configuration
+    feature_files = ["features/goal_1.pt", "features/no_goal_1.pt"]
+    labels = [1, 0]
+    model_config = {
+        'feature_dim': 512,
+        'hidden_dim': 128,
+        'num_classes': 2
+    }
+
+    # Initialize model and trainer
+    model = CNN_LSTM(**model_config)
+    trainer = ModelTrainer(
+        model=model,
+        criterion=nn.CrossEntropyLoss(),
+        num_epochs=10
+    )
+
+    # Prepare data and train
+    dataloader = trainer.prepare_data(feature_files, labels)
+    trainer.train(dataloader)
+    trainer.save_model("goal_detection_model.pth")
+
+if __name__ == "__main__":
+    main()
