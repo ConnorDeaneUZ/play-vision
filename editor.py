@@ -33,7 +33,7 @@ class HighlightDetector:
     def analyze_audio(self):
         """Break down the audio into chunks and measure their intensity"""
         audio = self.processed_video.audio
-        raw_audio = audio.to_soundarray(fps=self.config.sample_rate)
+        raw_audio = audio.to_soundarray(fps=self.config.sample_rate) # moviepy uses fps for sample rate
         samples_per_chunk = int(self.config.sample_rate * self.config.chunk_duration)
         
         # Process audio in small chunks
@@ -48,7 +48,7 @@ class HighlightDetector:
             loudness = np.sqrt(np.mean(mono_audio**2))
             self.audio_intensity_values.append(loudness)
 
-    def detect_spikes(self) -> List[float]:
+    def detect_spikes(self):
         """Find moments where audio is louder than usual"""
         # Calculate threshold based on percentile of loudness values
         loudness_threshold = np.percentile(self.audio_intensity_values, self.config.spike_threshold_percentile)
@@ -59,17 +59,17 @@ class HighlightDetector:
         # Remove duplicates and round to nearest second
         return list(dict.fromkeys(np.round(timestamp_seconds)))
 
-    def create_intervals(self, exciting_moments: List[float]) -> List[Tuple[float, float]]:
+    def create_intervals(self, exciting_moments):
         """Create time ranges around exciting moments"""
         time_ranges = []
         for moment in sorted(exciting_moments):
             # Add buffer time before and after each moment
-            start_time = max(0, moment - self.config.highlight_buffer)
-            end_time = min(moment + self.config.highlight_buffer, self.video_clip.duration)
+            start_time = max(0, moment - self.config.highlight_buffer) # clip does not allow negative start times
+            end_time = min(moment + self.config.highlight_buffer, self.video_clip.duration) # clip does not allow end times greater than duration
             time_ranges.append((start_time, end_time))
         return time_ranges
 
-    def merge_intervals(self, time_ranges: List[Tuple[float, float]]):
+    def merge_intervals(self, time_ranges):
         """Combine overlapping time ranges into longer segments"""
         if not time_ranges:
             return
@@ -99,9 +99,9 @@ class HighlightDetector:
                 highlight_clip.write_videofile(output_path)
                 highlight_clip.close()
         finally:
-            self.cleanup()
+            self.cleanup() # release video resources so we don't run out of memory
 
-    def cleanup(self):
+    def cleanup(self): # release video resources so we don't run out of memory
         """Release video resources"""
         if self.processed_video:
             self.processed_video.close()
