@@ -4,30 +4,27 @@ from moviepy import VideoFileClip
 from typing import Optional
 
 
+class VideoExtractorConfig:
+    frames_per_second: int = 10
+    output_folder: str = "frames/"
+
 class VideoFrameExtractor:
-    def __init__(self, video_path: str, output_folder: str, frames_per_second: int = 10):
-        """
-        Sets up the video frame extractor with basic settings.
-        
-        Args:
-            video_path (str): Where your video file is located (e.g., "my_video.mp4")
-            output_folder (str): Where you want to save the extracted frames
-            frames_per_second (int): How many frames to extract each second (default: 10)
-        """
+    def __init__(self, video_path: str):
+        """Sets up the video frame extractor with basic settings."""
         self.video_path = video_path
-        self.output_folder = output_folder
-        self.frames_per_second = frames_per_second
-        self.loaded_video: Optional[VideoFileClip] = None
+        self.output_folder = VideoExtractorConfig.output_folder
+        self.frames_per_second = VideoExtractorConfig.frames_per_second
+        self.loaded_video: VideoFileClip | None = None
         
-    def _create_output_folder(self) -> None:
+    def _create_output_folder(self):
         """Creates a folder to store the extracted frames if it doesn't exist yet."""
         os.makedirs(self.output_folder, exist_ok=True)
         
-    def _open_video(self) -> None:
+    def _open_video(self):
         """Opens the video file so we can read from it."""
         self.loaded_video = VideoFileClip(self.video_path)
         
-    def _save_single_frame(self, image_data, frame_number: int) -> None:
+    def _save_single_frame(self, image_data, frame_number: int):
         """
         Saves one frame as an image file.
         
@@ -42,7 +39,7 @@ class VideoFrameExtractor:
         # Save the image to disk
         cv2.imwrite(image_path, image_data_bgr)
         
-    def extract(self) -> None:
+    def extract(self):
         """
         Main function that extracts all frames from the video.
         This will create numbered image files in your output folder.
@@ -73,16 +70,3 @@ class VideoFrameExtractor:
             # Always close the video file when we're done
             if self.loaded_video:
                 self.loaded_video.close()
-                
-    @property
-    def frame_count(self) -> int:
-        """
-        Calculates how many frames will be extracted from the video.
-        Returns 0 if no video is loaded yet.
-        """
-        if self.loaded_video:
-            return int(self.loaded_video.duration * self.frames_per_second)
-        return 0
-
-
-

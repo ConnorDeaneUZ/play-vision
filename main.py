@@ -8,7 +8,7 @@ def main():
         detector.process("clips", verbose=False)
         
         # Only extract frames after highlights are processed successfully
-        frames_extractor = VideoFrameExtractor("clips/highlight-1.mp4", "frames/")
+        frames_extractor = VideoFrameExtractor("clips/highlight-1.mp4")
         frames_extractor.extract()
 
         # Extract features from frames after extraction
