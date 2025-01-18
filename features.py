@@ -3,7 +3,6 @@ import torchvision.models as models
 import torchvision.transforms as transforms
 from PIL import Image
 import os
-import cv2
 import numpy as np
 
 
@@ -15,6 +14,8 @@ class FeatureExtractor:
     
     def _setup_model(self, model_name):
         # Initialize and configure the model
+
+        """we remove the classification layer of the model so that the images are not forced into a predefined category"""
         if model_name == 'resnet18':
             model = models.resnet18(weights='IMAGENET1K_V1')
             model.fc = torch.nn.Identity()  # Remove the classification layer
@@ -25,6 +26,8 @@ class FeatureExtractor:
     
     def _setup_transforms(self):
         # Define image transformations
+
+        """ensuring the images are the correct size and format for the model"""
         return transforms.Compose([
             transforms.Resize((224, 224)),
             transforms.ToTensor(),
@@ -38,13 +41,20 @@ class FeatureExtractor:
         """Extract features from a single image."""
         image = Image.open(image_path).convert("RGB")
         input_tensor = self.transform(image).unsqueeze(0).to(self.device)
+
+        """CPU: Load image from disk
+            → CPU: Apply transformations (resize, normalize)
+                → CPU: Convert to tensor
+                → GPU: Move tensor to GPU (if available)
+                    → GPU: Run through neural network
+                    → CPU: Move results back for saving/further processing"""
         
         with torch.no_grad():
-            features = self.model(input_tensor).squeeze(0)
+            features = self.model(input_tensor).squeeze(0) # Images only need a forward pass therefore we dont need the gradient classification that will use more memory
         
         return features.cpu()
     
-    def extract_from_directory(self, frame_dir, file_extension=".jpg", save_path=None, save_dir=None):
+    def extract_from_directory(self, frame_dir, file_extension=".jpg", save_path=None):
         """Extract features from all images in a directory.
         
         Args:
@@ -63,7 +73,7 @@ class FeatureExtractor:
             feature = self.extract_single_image(frame_path)
             features.append(feature.numpy())
         
-        features_tensor = torch.from_numpy(np.array(features))
+        features_tensor = torch.tensor(np.array(features))
         
         if save_path:
             # Create directory first
