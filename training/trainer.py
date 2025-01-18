@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
-from detection import CNN_LSTM
+from models.cnn_lstm import CNN_LSTM
 
 class VideoDataset(Dataset):
     def __init__(self, feature_files, labels):

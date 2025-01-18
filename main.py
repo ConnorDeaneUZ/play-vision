@@ -1,6 +1,6 @@
-from editor import HighlightDetector
-from extract import VideoFrameExtractor
-from features import FeatureExtractor
+from preprocessing.video_editor import HighlightDetector
+from preprocessing.frame_extractor import VideoFrameExtractor
+from preprocessing.feature_extractor import FeatureExtractor
 
 def main():
     try:
