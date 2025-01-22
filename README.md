@@ -30,7 +30,7 @@ Welcome to the **Play Vision** project. This repository provides an innovative, 
 - **Automation**: Replace manual video review with a fully automated pipeline.
 - **Scalability**: Process thousands of hours of match footage efficiently.
 - **Accuracy**: Achieve high precision in goal detection using robust feature extraction and sequence modeling techniques.
-- **Real-World Applicability**: Adaptable for broadcasters, analysts, or sports organizations to streamline game analysis.
+- **Real-World Applicability**: Adaptable for broadcasters, analysts, or sports organisations to streamline game analysis.
 
 ---
 
@@ -63,9 +63,3 @@ Welcome to the **Play Vision** project. This repository provides an innovative, 
 - **Audio Processing**: MoviePy and Numpy for detecting audio spikes and analysing sound intensity.
 
 ---
-
-## 📋 How to Use:
-1. Clone the repository:  
-   ```bash
-   git clone https://github.com/your-username/play-vision.git
-   cd play-vision
