@@ -6,7 +6,7 @@ import os
 def process_clips(clips_dir, frames_dir, features_dir):
 
     # # Initialize the highlight detector with the source video
-    # highlight_detector = HighlightDetector('albion.mp4')
+    # highlight_detector = HighlightDetector('miss-5.mp4')
     # # Run the detection process
     # highlight_detector.process(output_folder=features_dir, verbose=True)
 

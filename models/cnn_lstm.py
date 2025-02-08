@@ -29,31 +29,53 @@ class CNN_LSTM(nn.Module):
         super().__init__()
         self.config = config
         
-        self.lstm = nn.LSTM(
-            input_size=config.feature_dim,
-            hidden_size=config.hidden_dim,
-            num_layers=config.num_layers,
-            batch_first=True,
-            dropout=config.dropout if config.num_layers > 1 else 0,
-            bidirectional=config.bidirectional
+        # Input normalization
+        self.layer_norm = nn.LayerNorm(config.feature_dim)
+        
+        # Feature reduction with residual
+        self.feature_reduction = nn.Sequential(
+            nn.Linear(config.feature_dim, config.hidden_dim * 2),
+            nn.LayerNorm(config.hidden_dim * 2),
+            nn.ReLU(),
+            nn.Dropout(config.dropout),
+            nn.Linear(config.hidden_dim * 2, config.hidden_dim)
         )
         
-        # Adjust final layer size if bidirectional
-        fc_input_dim = config.hidden_dim * 2 if config.bidirectional else config.hidden_dim
-        self.fc = nn.Linear(fc_input_dim, config.num_classes)
-    
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass of the model.
+        # LSTM layer
+        self.lstm = nn.LSTM(
+            input_size=config.hidden_dim,
+            hidden_size=config.hidden_dim,
+            num_layers=1,
+            batch_first=True,
+            dropout=config.dropout
+        )
         
-        Args:
-            x (torch.Tensor): Input tensor of shape (batch_size, seq_length, feature_dim)
-            
-        Returns:
-            torch.Tensor: Output tensor of shape (batch_size, num_classes)
-        """
+        # Classifier with skip connection
+        self.classifier = nn.Sequential(
+            nn.LayerNorm(config.hidden_dim),
+            nn.Linear(config.hidden_dim, config.hidden_dim // 2),
+            nn.ReLU(),
+            nn.Dropout(config.dropout),
+            nn.LayerNorm(config.hidden_dim // 2),
+            nn.Linear(config.hidden_dim // 2, config.num_classes)
+        )
+    
+    def forward(self, x):
+        # Input normalization
+        x = self.layer_norm(x)
+        
+        # Feature reduction
+        x = self.feature_reduction(x)
+        
+        # LSTM processing
         lstm_out, _ = self.lstm(x)
-        final_hidden_state = lstm_out[:, -1, :]
-        return self.fc(final_hidden_state)
+        
+        # Global average pooling
+        out = torch.mean(lstm_out, dim=1)
+        
+        # Classification
+        out = self.classifier(out)
+        return out
     
     def get_num_parameters(self) -> int:
         """Calculate total number of trainable parameters."""

@@ -26,30 +26,26 @@ def get_all_feature_files():
     return feature_files, labels
 
 def main():
-    # Get all feature files and labels
     feature_files, labels = get_all_feature_files()
     
-    # Create model configuration with simpler architecture first
     model_config = ModelConfig(
         feature_dim=512,
-        hidden_dim=128,     # Further reduced complexity
+        hidden_dim=160,     # Back to proven hidden dim
         num_classes=2,
-        num_layers=1,       # Single layer to start
-        dropout=0.3,        # Moderate dropout
-        bidirectional=False # Start with unidirectional
+        num_layers=1,
+        dropout=0.2,        # Keep moderate dropout
+        bidirectional=True  # Keep bidirectional
     )
-
-    # Initialize model
+    
     model = CNN_LSTM(model_config)
     
-    # Initialize trainer with diagnostic settings
     trainer = ModelTrainer(
         model=model,
         criterion=nn.CrossEntropyLoss(),
-        learning_rate=0.0005,  # More conservative learning rate
-        batch_size=2,
-        num_epochs=20,
-        patience=10
+        learning_rate=0.001,
+        batch_size=32,
+        num_epochs=30,      # Back to 30 epochs
+        patience=8          # Standard patience
     )
     
     # Prepare data and get class weights

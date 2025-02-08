@@ -5,6 +5,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 from models.cnn_lstm import CNN_LSTM
 import numpy as np
+import math
 
 # Suppress the FutureWarning for torch.load
 warnings.filterwarnings('ignore', category=FutureWarning)
@@ -14,6 +15,22 @@ class VideoDataset(Dataset):
         self.feature_files = feature_files
         self.labels = labels
         self.max_seq_length = max_seq_length
+        
+        # Calculate mean and std for feature normalization
+        self.mean = None
+        self.std = None
+        self._compute_statistics()
+
+    def _compute_statistics(self):
+        """Compute dataset statistics for normalization"""
+        features_list = []
+        for file in self.feature_files[:100]:  # Use subset for efficiency
+            features = torch.load(file)
+            features_list.append(features)
+        
+        features_tensor = torch.cat(features_list, dim=0)
+        self.mean = features_tensor.mean(dim=0)
+        self.std = features_tensor.std(dim=0)
 
     def __len__(self):
         return len(self.feature_files)
@@ -22,42 +39,69 @@ class VideoDataset(Dataset):
         features = torch.load(self.feature_files[idx])
         features = features.clone().detach().to(torch.float32)
         
-        # Pad or truncate sequence to max_seq_length
+        # Normalize features
+        features = (features - self.mean) / (self.std + 1e-7)
+        
+        # Create attention mask for padding
         seq_length = features.size(0)
+        attention_mask = torch.ones(self.max_seq_length, dtype=torch.bool)
+        
         if seq_length > self.max_seq_length:
-            # Truncate
             features = features[:self.max_seq_length]
-        elif seq_length < self.max_seq_length:
+            attention_mask = attention_mask
+        else:
             # Pad with zeros
-            padding = torch.zeros(self.max_seq_length - seq_length, features.size(1), dtype=torch.float32)
+            padding = torch.zeros(
+                self.max_seq_length - seq_length,
+                features.size(1),
+                dtype=torch.float32
+            )
             features = torch.cat([features, padding], dim=0)
+            attention_mask[seq_length:] = 0
         
         label = torch.tensor(self.labels[idx], dtype=torch.long)
-        return features, label
+        return {
+            'features': features,
+            'attention_mask': attention_mask,
+            'label': label
+        }
 
 class ModelTrainer:
     def __init__(
         self,
         model,
         criterion,
-        optimizer_class=optim.Adam,
+        optimizer_class=optim.AdamW,
         learning_rate=0.001,
-        batch_size=2,
-        num_epochs=10,
-        patience=3,  # Early stopping patience
+        batch_size=32,
+        num_epochs=30,      # Reduced epochs
+        patience=8,         # Reduced patience
         device='cuda' if torch.cuda.is_available() else 'cpu'
     ):
         self.device = device
         self.model = model.to(device)
         self.criterion = criterion
-        self.optimizer = optimizer_class(model.parameters(), lr=learning_rate)
-        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, mode='min', patience=2, factor=0.5
-        )
         self.batch_size = batch_size
         self.num_epochs = num_epochs
         self.patience = patience
-
+        
+        # Modified optimizer settings
+        self.optimizer = optimizer_class(
+            model.parameters(),
+            lr=learning_rate,
+            weight_decay=0.003,    # Slightly reduced weight decay
+            betas=(0.9, 0.999)    # Keep default betas
+        )
+        
+        # Use CosineAnnealingLR with longer cycle
+        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            self.optimizer,
+            T_max=num_epochs // 2,  # Half epoch cycle
+            eta_min=1e-6
+        )
+        
+        self.grad_clip = 0.5      # Keep moderate gradient clipping
+    
     def prepare_data(self, feature_files, labels, val_split=0.2):
         # Convert to numpy arrays for easier manipulation
         feature_files = np.array(feature_files)
@@ -114,85 +158,187 @@ class ModelTrainer:
         
         return train_loader, val_loader, class_weights
 
-    def train_step(self, features, labels):
-        features = features.to(self.device)
-        labels = labels.to(self.device)
+    def frame_shuffle_augmentation(self, features):
+        """
+        Randomly shuffle some frames while keeping start/end frames fixed
+        
+        Args:
+            features: Tensor of shape (batch_size, sequence_length, feature_dim)
+        """
+        batch_size, seq_len, feat_dim = features.shape
+        shuffled_features = features.clone()
+        
+        # Keep first and last 2 frames fixed, shuffle middle frames
+        for i in range(batch_size):
+            middle_idx = torch.randperm(seq_len-4) + 2
+            shuffled_features[i, 2:-2] = features[i, middle_idx]
+        
+        return shuffled_features
+
+    def train_step(self, batch):
+        features = batch['features'].to(self.device)
+        labels = batch['label'].to(self.device)
+        
+        # Always apply some form of augmentation
+        features = self.apply_augmentations(features)
+        
+        # Add dropout to input features
+        feature_dropout = nn.Dropout(p=0.1)
+        features = feature_dropout(features)
         
         self.optimizer.zero_grad()
         outputs = self.model(features)
-        loss = self.criterion(outputs, labels)
-        loss.backward()
-        self.optimizer.step()
         
+        # Use a lower label smoothing factor
+        smooth_factor = 0.05  # Reduced smoothing factor (was 0.1)
+        n_classes = outputs.size(1)
+        with torch.no_grad():
+            true_dist = torch.zeros_like(outputs)
+            true_dist.fill_(smooth_factor / (n_classes - 1))
+            true_dist.scatter_(1, labels.unsqueeze(1), 1.0 - smooth_factor)
+        
+        loss = torch.nn.functional.kl_div(
+            torch.nn.functional.log_softmax(outputs, dim=1),
+            true_dist,
+            reduction='batchmean'
+        )
+        
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip)
+        self.optimizer.step()
         return loss.item()
 
-    def evaluate(self, dataloader):
+    def apply_augmentations(self, features):
+        """Enhanced augmentation pipeline"""
+        # Always apply frame shuffling
+        features = self.frame_shuffle_augmentation(features)
+        
+        # Increased probabilities for other augmentations
+        if torch.rand(1).item() < 0.5:  # Increased from 0.3
+            features = self.random_frame_drop(features)
+        
+        if torch.rand(1).item() < 0.4:  # Increased from 0.2
+            features = self.temporal_crop(features)
+        
+        # Add Gaussian noise
+        noise = torch.randn_like(features) * 0.05
+        features = features + noise
+        
+        return features
+    
+    def random_frame_drop(self, features):
+        """Randomly drop frames"""
+        batch_size, seq_len, feat_dim = features.shape
+        mask = torch.rand(batch_size, seq_len, 1, device=features.device) > 0.1
+        return features * mask
+    
+    def temporal_crop(self, features):
+        """Random temporal cropping"""
+        batch_size, seq_len, feat_dim = features.shape
+        crop_len = int(seq_len * 0.8)  # Crop to 80% of original length
+        start = torch.randint(0, seq_len - crop_len, (1,)).item()
+        cropped = features[:, start:start+crop_len, :]
+        # Pad back to original length
+        padding = torch.zeros(batch_size, seq_len - crop_len, feat_dim, device=features.device)
+        return torch.cat([cropped, padding], dim=1)
+
+    def validate(self, val_loader):
+        """Validation step"""
         self.model.eval()
-        total_loss = 0
-        correct_predictions = 0
-        total_predictions = 0
+        total_val_loss = 0
+        val_correct = 0
+        val_total = 0
         
         with torch.no_grad():
-            for features, labels in dataloader:
-                features = features.to(self.device)
-                labels = labels.to(self.device)
+            for batch in val_loader:
+                features = batch['features'].to(self.device)
+                labels = batch['label'].to(self.device)
+                
+                # Normalize features
+                features = (features - features.mean()) / (features.std() + 1e-8)
                 
                 outputs = self.model(features)
                 loss = self.criterion(outputs, labels)
-                total_loss += loss.item()
+                total_val_loss += loss.item()
                 
-                _, predicted = torch.max(outputs, 1)
-                correct_predictions += (predicted == labels).sum().item()
-                total_predictions += labels.size(0)
+                _, predicted = torch.max(outputs.data, 1)
+                val_total += labels.size(0)
+                val_correct += (predicted == labels).sum().item()
         
-        return total_loss / len(dataloader), (correct_predictions / total_predictions) * 100
+        val_loss = total_val_loss / len(val_loader)
+        val_acc = 100 * val_correct / val_total
+        return val_loss, val_acc
 
     def train(self, train_loader, val_loader):
+        """Train the model"""
+        print("\nStarting training...")
         best_val_loss = float('inf')
         patience_counter = 0
+        training_history = []
         
         for epoch in range(self.num_epochs):
-            # Training phase
             self.model.train()
-            train_loss = 0
-            correct_predictions = 0
-            total_predictions = 0
+            total_train_loss = 0
+            train_correct = 0
+            train_total = 0
             
-            for features, labels in train_loader:
-                loss = self.train_step(features, labels)
-                train_loss += loss
+            # Training loop
+            for batch in train_loader:
+                loss = self.train_step(batch)
+                total_train_loss += loss
                 
-                with torch.no_grad():
-                    outputs = self.model(features.to(self.device))
-                    _, predicted = torch.max(outputs, 1)
-                    correct_predictions += (predicted == labels.to(self.device)).sum().item()
-                    total_predictions += labels.size(0)
+                # Calculate accuracy
+                outputs = self.model(batch['features'].to(self.device))
+                _, predicted = torch.max(outputs.data, 1)
+                labels = batch['label'].to(self.device)
+                train_total += labels.size(0)
+                train_correct += (predicted == labels).sum().item()
             
-            train_loss = train_loss / len(train_loader)
-            train_accuracy = (correct_predictions / total_predictions) * 100
+            # Validation loop
+            val_loss, val_acc = self.validate(val_loader)
             
-            # Validation phase
-            val_loss, val_accuracy = self.evaluate(val_loader)
+            # Calculate metrics
+            train_loss = total_train_loss / len(train_loader)
+            train_acc = 100 * train_correct / train_total
             
-            # Learning rate scheduling
-            self.scheduler.step(val_loss)
+            # Update learning rate based on validation loss
+            self.scheduler.step()
+            current_lr = self.optimizer.param_groups[0]['lr']
             
-            print(f"Epoch {epoch + 1}/{self.num_epochs}")
-            print(f"  Train Loss: {train_loss:.4f}")
-            print(f"  Train Accuracy: {train_accuracy:.2f}%")
-            print(f"  Val Loss: {val_loss:.4f}")
-            print(f"  Val Accuracy: {val_accuracy:.2f}%")
-            print(f"  Learning Rate: {self.optimizer.param_groups[0]['lr']:.6f}")
+            # Print epoch results
+            print(f"\nEpoch {epoch + 1}/{self.num_epochs}")
+            print(f"  Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
+            print(f"  Train Acc:  {train_acc:>6.2f}% | Val Acc:  {val_acc:>6.2f}%")
+            print(f"  Learning Rate: {current_lr:6f}")
             
-            # Early stopping
+            # Early stopping check
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 patience_counter = 0
+                # Save best model
+                torch.save(self.model.state_dict(), "best_model.pth")
+                print("  → New best validation loss!")
             else:
                 patience_counter += 1
+                print(f"  → No improvement for {patience_counter} epochs")
                 if patience_counter >= self.patience:
-                    print("Early stopping triggered")
+                    print("\nEarly stopping triggered!")
+                    print(f"Best validation loss: {best_val_loss:.4f}")
+                    print(f"Training stopped after {epoch + 1} epochs")
+                    # Load best model
+                    self.model.load_state_dict(torch.load("best_model.pth"))
                     break
+            
+            training_history.append({
+                'epoch': epoch + 1,
+                'train_loss': train_loss,
+                'val_loss': val_loss,
+                'train_acc': train_acc,
+                'val_acc': val_acc,
+                'lr': current_lr
+            })
+        
+        return training_history
 
     def save_model(self, path):
         torch.save(self.model.state_dict(), path)
@@ -227,7 +373,7 @@ def main():
     trainer.criterion = nn.CrossEntropyLoss(weight=class_weights)
     
     # Train the model
-    trainer.train(train_loader, val_loader)
+    training_history = trainer.train(train_loader, val_loader)
     trainer.save_model("goal_detection_model.pth")
 
 if __name__ == "__main__":
