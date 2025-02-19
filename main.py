@@ -5,8 +5,8 @@ import os
 
 def process_clips(clips_dir, frames_dir, features_dir):
 
-    # # Initialize the highlight detector with the source video
-    # highlight_detector = HighlightDetector('miss-5.mp4')
+    # # # Initialize the highlight detector with the source video
+    # highlight_detector = HighlightDetector('southhampton.mp4')
     # # Run the detection process
     # highlight_detector.process(output_folder=features_dir, verbose=True)
 
@@ -46,7 +46,7 @@ def main():
             features_dir="features/goal"
         )
         
-        # Process no-goal clips
+        # # Process no-goal clips
         process_clips(
             clips_dir="training/clips/no_goals",
             frames_dir="frames/no_goals",

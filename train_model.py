@@ -30,11 +30,10 @@ def main():
     
     model_config = ModelConfig(
         feature_dim=512,
-        hidden_dim=160,     # Back to proven hidden dim
+        hidden_dim=128,       # Reduced from 160
         num_classes=2,
-        num_layers=1,
-        dropout=0.2,        # Keep moderate dropout
-        bidirectional=True  # Keep bidirectional
+        num_layers=1,         # Reduced from 2
+        dropout=0.5,          # Increased from 0.35
     )
     
     model = CNN_LSTM(model_config)
@@ -42,10 +41,10 @@ def main():
     trainer = ModelTrainer(
         model=model,
         criterion=nn.CrossEntropyLoss(),
-        learning_rate=0.001,
-        batch_size=32,
-        num_epochs=30,      # Back to 30 epochs
-        patience=8          # Standard patience
+        learning_rate=0.0001,  # Reduced from 0.0004
+        batch_size=8,          # Reduced from 12
+        num_epochs=40,
+        patience=5,            # Reduced from 8
     )
     
     # Prepare data and get class weights
